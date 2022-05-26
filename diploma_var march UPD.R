@@ -1,6 +1,6 @@
 library(readxl)
 DowJonesMarch <- read_excel("DowJones MARCH.xlsx")
-names(DowJonesMarch)
+View(DataSet2)
 library(Ecdat)
 library(tidyverse)
 library(ggstatsplot)
@@ -67,8 +67,9 @@ library(randomForestExplainer)
 library(RColorBrewer)
 library(ggsci)
 library(dismo)
+library(glmnet)
 
-
+summary(DataSet2)
 #ограничим выборку по годам
 y <- as.numeric(10:21)
 DataSet <- dplyr::filter(DowJonesMarch, DowJonesMarch$Number_Year %in% y)
@@ -95,7 +96,18 @@ colnames(DataSet2) <- c("Year", "ID Company", "Number_Year", "Number_Company", "
                         "BS_Total_Liabilities", "BS_ST_Investments", "IS_Operating_Income", "Total_Common_Equity", "BS_Privelege_Equity", 
                         "Independent_Directors", "Shares_Directors", "RE")
 
+stargazer(DataSet2, type = "html", out = 'summary.html', summary = TRUE)
 
+data_svod1 <- DataSet2 %>% dplyr::filter(Number_Year == 19)
+data_svod2 <- DataSet2 %>% dplyr::filter(Number_Year == 20)
+data_svod3 <- DataSet2 %>% dplyr::filter(Number_Year == 21)
+t.test(data_svod1$DIV, data_svod2$DIV)
+t.test(data_svod2$DIV, data_svod3$DIV)
+t.test(data_svod1$DIV, data_svod3$DIV)
+
+var.test(data_svod1$DIV, data_svod2$DIV)
+var.test(data_svod2$DIV, data_svod3$DIV)
+var.test(data_svod1$DIV, data_svod3$DIV)
 #работаем с DataSet2
 
 #проведем предварительное исследование по плательщикам
@@ -243,6 +255,10 @@ ggplot(na.omit(increase_data7)) + geom_bar(aes(x = Number_Year, y = delta_Lintne
 
 #Стадия жизненного цикла по DeAngelo & DeAngelo & Stulz, 2006 (коэффициент заработанного капитала)
 DataSet2$Stage_Indicator1 <- DataSet2$RE_period / DataSet2$Total_Equity
+m1 <- data.frame(DataSet2$RE_period, DataSet2$Total_Equity)
+sort(DataSet2$Stage_Indicator1)
+
+
 #Стадия жизненного цикла по Leary & Michaely, 2011 (размер и возраст компании)
 DataSet2$Stage_Indicator2 <- ifelse(DataSet2$Foundation_Year > 0, 2022 - DataSet2$Foundation_Year, "-")
 
@@ -554,6 +570,28 @@ DeAngelo5_lagSI <- transmute(DataSet2,
                                          Percentile = Percentile$Percentile,
                                          Capitalization = log(Capitalization)
 )
+View(DeAngelo)
+vector <- names_data %>% dplyr::filter(!(Number_Company %in% c(4,6,7,12,14,19,22)))
+vector1 <- vector[,1]
+A1 <- sample(vector1, 14)
+
+stargazer(DataSet2, summary = TRUE, type = "html", out = "download.html")
+summary(DataSet2)
+new_Data <- DataSet2 %>% dplyr::filter(!(Number_Company %in% c(4,6,7,12,14,19,22))) %>% dplyr::filter(Stage_Indicator1 > 0)
+stargazer(new_Data, summary = TRUE, type = "html", out = "download_new.html")
+
+DeAngelo_delete <- DeAngelo %>% dplyr::filter(!(Number_Company %in% c(4,6,7,12,14,19,22))) %>% dplyr::filter(Stage_Indicator1 > 0)
+model_delete <- lm(data = na.omit(DeAngelo_delete), DIV~ . -PayoutRatio-PayOrNot-Number_Year+as.character(Number_Company)-Number_Company-MB_ratio-Capitalization)
+summary(model_delete)
+stargazer(model_delete, type = "html", out = "type.html")
+table(DeAngelo_delete$Number_Company)
+stepAIC(model_delete)
+model_delete1 <- lm(data = na.omit(DeAngelo_delete), DIV ~ Stage_Indicator1 + REtoTA + TEtoTA + SGR  + Percentile+as.character(Number_Company))
+summary(model_delete1)
+v <- vcovHC(model_delete1, type = "HC0")
+coeftest(model_delete1, vcov.=v)
+View(DeAngelo_delete)
+
 View(DataSet2)
 #с DIV
 model1 <- lm(data = na.omit(DeAngelo), DIV~ . -PayoutRatio-PayOrNot-Number_Year-Number_Company-MB_ratio-Capitalization)
@@ -1146,10 +1184,10 @@ FamaFrench1 <- merge(FamaFrench, names_data, by ="Number_Company") #соедин
 View(FamaFrench1)
 colnames(FamaFrench1) <- c("Number_Company", "Capitalization", "BM_ratio", "PayoutRatio" , "ID_Company", "ID")
 ggplot(data = FamaFrench1, aes(x = Capitalization, y = BM_ratio)) + geom_point(size = 1, shape = 10, colour = "purple") + 
-  geom_text(aes(label=ID),hjust=0, vjust=0, size = 3, colour = "black") + 
-  geom_hline(yintercept=quantile(FamaFrench1$BM_ratio, 0.7), color = "midnightblue", size = 1) + 
-  geom_hline(yintercept=quantile(FamaFrench1$BM_ratio, 0.3), color = "turquoise3", size = 1) + 
-  geom_vline(xintercept=median(FamaFrench1$Capitalization), color = "violetred3", size = 1) + theme_bw() + 
+  geom_text(aes(label=ID),hjust=0, vjust=0, size = 5, colour = "black") + 
+  geom_hline(yintercept=quantile(FamaFrench1$BM_ratio, 0.7), color = "lightblue", size = 1) + 
+  geom_hline(yintercept=quantile(FamaFrench1$BM_ratio, 0.3), color = "lightblue", size = 1) + 
+  geom_vline(xintercept=median(FamaFrench1$Capitalization), color = "lightblue", size = 1) + theme_bw() + 
   xlab("Капитализация компании") + ylab("Соотношение Book-to-Market") + 
   annotate("text", x = 1500000, y=0.4, label = "Big High", color="darkblue") + 
   annotate("text", x = 60000, y=0.4, label = "Small High",  color="darkblue") + 
@@ -1158,7 +1196,9 @@ ggplot(data = FamaFrench1, aes(x = Capitalization, y = BM_ratio)) + geom_point(s
 Neutral",  color="darkblue") + 
   annotate("text", x = 1500000, y=0.0, label = "Big Low", color="darkblue") + 
   annotate("text", x = 60000, y=0.0, label = "Small Low",  color="darkblue") + 
-  ggtitle("Распределение компаний по параметрам из модели Фамы-Френча")
+  ggtitle("Распределение компаний по параметрам из модели Фамы-Френча") + 
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8), 
+        axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
 
 
 #построим 3D график
@@ -2016,6 +2056,8 @@ mod_dyn <- dynlm(dr1~ L(dr1, 1:2))
 adf.test(dr)
 summary(mod_dyn)
 
+
+
 mr <- DataSet2$PayoutRatio
 adf.test(mr)
 
@@ -2062,11 +2104,11 @@ for (i in 1:30){
 summary(mod_dyn5) #не везде есть значимое влияние первого лага: mod_dyn4
 
 stargazer(mod_dyn1, mod_dyn2, mod_dyn4, mod_dyn5, mod_dyn7, type = "html", out = "dyn1.html")
-stargazer(mod_dyn8, mod_dyn9, mod_dyn12, mod_dyn13, mod_dyn14, mod_dyn15, mod_dyn16, type = "html", out = "dyn2.html")
+stargazer(mod_dyn8, mod_dyn9, mod_dyn12, mod_dyn13, mod_dyn14, mod_dyn15, type = "html", out = "dyn2.html")
 stargazer(mod_dyn18, mod_dyn19, mod_dyn20, mod_dyn21, mod_dyn22, mod_dyn23, type = "html", out = "dyn3.html")
 stargazer(mod_dyn24, mod_dyn26, mod_dyn27, mod_dyn28, mod_dyn29, mod_dyn30, type = "html", out = "dyn4.html")
 
-stargazer(mod_dyn18, mod_dyn19, mod_dyn20, mod_dyn21, mod_dyn22, mod_dyn23, mod_dyn24, mod_dyn26, mod_dyn27, mod_dyn28, mod_dyn29, mod_dyn30, type = "html", out = "dyn.total.html")
+stargazer(mod_dyn1, mod_dyn2, mod_dyn4, mod_dyn5, mod_dyn7, mod_dyn8, mod_dyn9, mod_dyn12, mod_dyn13, mod_dyn14, mod_dyn15, mod_dyn16, mod_dyn18, mod_dyn19, mod_dyn20, mod_dyn21, mod_dyn22, mod_dyn23, mod_dyn24, mod_dyn26, mod_dyn27, mod_dyn28, mod_dyn29, mod_dyn30, type = "html", out = "dyn.total.html")
 
 for (i in 1:30){
   assign(paste0("AR_Table_PR", i), dplyr::select(get(paste("AR_Table", i, sep="")),PayoutRatio))
@@ -2389,6 +2431,13 @@ Chart100
 Chart94 <- ggplot(data_for_graphs2, aes(x=DIV, y=Sales)) + 
   geom_point(aes(col=ID, size=DIV)) + theme_bw() + geom_smooth(method="loess", se=F) + xlab("Дивиденд на одну акцию") + ylab("Выручка")
 
+ggplot(data_for_graphs2, aes(x=DIV, y=Sales) ) +  stat_density_2d(bins = 70) + scale_fill_continuous(type = "viridis") + theme_bw()
+
+ggplot(data_for_graphs2, aes(x=DIV, y=Sales) ) +  stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
+  scale_fill_distiller(palette= "BuPu", direction=1) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0), labels = scales::comma) + xlab("Дивиденд на одну акцию") + ylab("Выручка") + theme(legend.position = "right") + ggtitle("Диаграмма рассеивания с отображением плотности распределения")
+
 #чем больше чистой прибыли, тем больше дивиденд на акцию?
 Chart95 <- ggplot(data_for_graphs2, aes(x=DIV, y=Net_Income)) + 
   geom_point(aes(col=ID, size=DIV)) + theme_bw() + geom_smooth(method="loess", se=F) + xlab("Дивиденд на одну акцию") + ylab("Чистая прибыль")
@@ -2603,7 +2652,7 @@ graph_base_5 %>% ggplot(aes(x = ROCE, y = Year_ch, fill = ..x..)) +
 Chart112 <- ggplot(data = graph_base_5, aes(color = industry, x = Dividends, y = Capitalization)) + scale_color_manual(values = c("#22211B", "#693F2F", "#CF391B", "#D06F1D", 
                                                                                                                                                             "#3b73ad", "#c48d74", "#cb7749", "#362321", 
                                                                                                                                                             "#768fad", "#904214", "#c1846a", "#d8b5ab")) + theme_bw() + geom_point() + geom_smooth(method=lm, se=FALSE, col='darkblue', size=1) + xlab("Совокупные дивидендные выплаты") + ylab("Капитализация компании") + labs("Отрасль") + 
-  theme(legend.position = "right") + ggtitle("Диаграмма рассеивания абсолютных величин дивидендных выплат и капитализации компании")
+  theme(legend.position = "bottom") + ggtitle("Диаграмма рассеивания абсолютных величин дивидендных выплат и капитализации компании")
 
 Chart112
 
@@ -2883,6 +2932,11 @@ queries=list(upset_query(set='DIV', fill='#693450'),
 
 upset(dummy, N, name='N', main.bar.color = "SteelBlue", sets.bar.color = "DarkCyan")
 #убрали просто CAPEX, оставили нормированный CAPEX
+data_proxy_del <- DataSet2 %>% transmute(Number_Company, DIV, DivToSales = Dividends/Sales, Dividends = log(Dividends), DivToTA = Dividends/BS_Total_Assets, BS_LT_Borrow, CF_FCFF, 
+                                                      Stage_Indicator1, Z_score, DebtToEquity = (DataSet2$BS_LT_Borrow + DataSet2$BS_ST_Borrow)/DataSet2$Total_Equity, Independent_Directors, WACC, CAPEXtoSales = CAPEX/Sales) 
+data_proxy_del1 <- data_proxy_del %>% dplyr::filter(!(Number_Company %in% c(4,6,7,12,14,19,22))) 
+model_proxy_del <- lm(data = data_proxy_del1, DIV ~.-DivToSales-Dividends-DivToTA-Number_Company)
+summary(model_proxy_del)
 model62 <- lm(data = data_sum1, DivToSales ~.-DIV-Dividends-DivToTA)
 summary(model62)
 stepAIC(model62)
@@ -3066,6 +3120,7 @@ forest2
 min_depth_frame1 <- min_depth_distribution(forest2)
 head(min_depth_frame1, n = 10)
 #график распределения минимальной глубины для десяти лучших переменных
+?plot_min_depth_distribution
 plot_min_depth_distribution(min_depth_frame1) + 
   xlab("Переменные") +
   ylab("Количество деревьев")+
@@ -3089,7 +3144,7 @@ Predict_values_proxy <- predict(forest2, newdata = proxy_mean)
 proxy_mean1 <- mutate(proxy_mean, Predict_values_proxy)
 ggplot(proxy_mean1, aes(x = Stage_Indicator1, y = Predict_values_proxy)) + geom_line(color = "darkblue", size = 1) + theme_bw() + xlab("Стадия жизненного цикла (Stage_Indicator1)") + ylab("Прогнозные значения дивиденда на одну акцию (DIV)") + ggtitle("Отражение зависимости между стадией жизненного цикла и 
 дивидендом на одну акцию для среднего наблюдения по выборке")
-
+min(Predict_values_proxy)
 
 #бустинг + прокси
 set.seed(123)
@@ -3139,7 +3194,7 @@ explanation_proxy_all <- lime::explain(
   kernel_width = 0.5
 )
 View(explanation_proxy_all)
-
+SGR
 explanation_proxy_all1 <- explanation_proxy_all %>% group_by(case, feature) %>% dplyr::arrange(-model_r2)
 explanation_proxy_all1$prediction <- round(explanation_proxy_all1$prediction, 2)
 
@@ -3225,6 +3280,27 @@ plot_explanations(explanation_gbm_proxy_cv_all1[1:60,]) +
   labs(title = "Важность переменных для конкретных случаев",
        subtitle = "Взяты 20 случаев с большей объясняющей силой") + theme_bw()+ scale_fill_gradient2(low="#acbdd3", mid="#5d80b6",
                                                                                                      high="#101e5a", midpoint=-1) 
+#LASSO + прокси 
+names(training_cv_proxy)
+model_lasso_proxy <- glmnet(training_cv_proxy[,-1], training_cv_proxy$DIV, alpha = 1, lambda = lambda) 
+lasso_proxy <- train(DIV ~ ., data = training_cv_proxy, method = 'glmnet', trControl = fitControl, verbose = FALSE)
+getTrainPerf(lasso_proxy) #самая лучшая модель
+lasso_proxy$bestTune
+#как зависит от лямбда размер каждого коэффициента
+
+plot(model_lasso_proxy, xvar = "lambda", label = TRUE, title = 'Зависимость размера коэффициента от параметра штрафа') #если логарифм лямбда будет 2, то коэффициенты резко падают
+#по горизонтали - доля объясненной дисперсии
+plot(model_lasso_proxy, xvar = "dev", label = TRUE) #если логарифм лямбда будет 2, то коэффициенты резко падают
+#чем меньше размер коэффициента лямбда, тем меньше объясняем
+#если хочу по максимуму объяснить посредством МНК, то коэффициенты надо брать такие
+
+#разлагаем штраф по составляющим, по горизонтали - величина штрафа (сумма модулей бета с крышкой), по вертикали штраф разложен по коэффициентам
+plot(model_lasso_proxy, xvar = "norm", label = TRUE) 
+#можно понять, какой коэффициент определяет сумму штрафа
+
+#посмотрим на сами коэффициенты - оценки коэффициентов в LASSO регрессии
+round(coef(model_lasso_proxy, s = c(0.1279877)),3)
+#ROA попал в 0
 #сравнение моделей: регрессия / случайный лес / бустинг 
 
 getTrainPerf(gbm_proxy)[2]
@@ -3777,6 +3853,17 @@ library(rpart.plot)
 rpart.plot(example, type = 2, extra = 1) 
 names(DeAngelo1)
 DeAngelo2 <- DeAngelo1[,-c(1,2,9,12,13,15)]
+
+names(DeAngelo_delete)
+forest_delete <- randomForest(DIV ~.-Number_Year-Number_Company-Capitalization-PayoutRatio-PayOrNot, data = na.omit(DeAngelo_delete), localImp = TRUE)
+min_depth_frame_delete <- min_depth_distribution(forest_delete)
+plot_min_depth_distribution(min_depth_frame_delete) + 
+  xlab("Переменные") +
+  ylab("Количество деревьев")+
+  scale_fill_manual(values = c("#003f5c", "#2f4b7c", "#665191", "#a05195", "#d45087", "#f95d6a", "#ff7c43", "#ffa600", 
+                               "#e45149", "#b6d2dd", "#259086", "#0a463c", "darkblue", "darkred"))
+varImpPlot(forest1) 
+
 forest1 <- randomForest(DIV ~ ., data = DeAngelo2, localImp = TRUE)
 forest1
 min_depth_frame <- min_depth_distribution(forest1)
@@ -3808,8 +3895,22 @@ DeAngelo2_mean <- transmute(DeAngelo2, REtoTA = mean(REtoTA), Stage_Indicator1 =
                             CashtoTA = mean(CashtoTA), Percentile = mean(Percentile))
 Predict_values <- predict(forest1, newdata = DeAngelo2_mean)
 DeAngelo2_mean1 <- mutate(DeAngelo2_mean, Predict_values)
+DeAngelo2_mean1$ID <- rep("random forest prediction", 275)
+svod4 <- DeAngelo2
+svod4$ID <- rep("фактические значения", 275)
+colnames(DeAngelo2_mean1)
+colnames(svod4)
+svod7 <- transmute(svod4, Stage_Indicator1 = Stage_Indicator1, DIV = DIV, ID = ID)
+svod5 <- transmute(DeAngelo2_mean1, Stage_Indicator1 = Stage_Indicator1, DIV = Predict_values, ID = ID)
+svod6 <- rbind(svod7, svod5)
+View(svod6)
 ggplot(DeAngelo2_mean1, aes(x = Stage_Indicator1, y = Predict_values)) + geom_line(color = "darkblue", size = 1) + theme_bw() + xlab("Стадия жизненного цикла (Stage_Indicator1)") + ylab("Прогнозные значения дивиденда на одну акцию (DIV)") + ggtitle("Отражение зависимости между стадией жизненного цикла и 
 дивидендом на одну акцию для среднего наблюдения по выборке")
+ggplot(svod6, aes(x = Stage_Indicator1, y = DIV, color = ID)) + geom_line(alpha = 0.5) + theme_bw() + scale_color_manual(values = c("darkred", "darkblue")) + 
+  xlab("Стадия жизненного цикла (Stage_Indicator1)") + ylab("Прогнозные значения дивиденда на одну акцию (DIV)") + ggtitle("График частичной зависимости между стадией жизненного цикла и 
+дивидендом на одну акцию для среднего наблюдения по выборке") + theme(legend.position = "bottom")
+
+
 
 DeAngelo2_mean2 <- transmute(DeAngelo2, REtoTA = mean(REtoTA), Stage_Indicator1 = mean(Stage_Indicator1), 
                             TEtoTA = TEtoTA, ROA = mean(ROA), SGR = mean(SGR), AGR = mean(AGR), 
@@ -3986,8 +4087,59 @@ plot_features(explanation_gbm_cv_all1[1:12,]) +
 
 plot_explanations(explanation_gbm_cv_all1[1:60,]) +
   labs(title = "Важность переменных для конкретных случаев",
-       subtitle = "Взяты 20 случаев с большей объясняющей силой") + theme_bw()+ scale_fill_gradient2(low="#acbdd3", mid="#5d80b6",
-                                                                                                     high="#101e5a", midpoint=-1) 
+       subtitle = "Взяты 20 случаев с большей объясняющей силой") + theme_bw()+ scale_fill_gradient2(low="#acbdd3", mid="#5d80b6",high="#101e5a", midpoint=-1) 
+#LASSO
+lasso_cv <- train(DIV ~ ., data = training_cv, method = 'glmnet', trControl = fitControl, verbose = FALSE)
+getTrainPerf(lasso_cv) #самая лучшая модель
+lasso_cv$bestTune
+plot(lasso_cv)
+plot(varImp(lasso_cv))
+ggplot(lasso_cv) + geom_point(col = "darkblue", size = 0.5) + scale_color_manual(values = c("#550445", "#c96588", "#5f73b3")) + theme_bw() + theme(legend.position = "bottom")
+lambda <- seq(1000, 0.1, length = 100)
+model_lasso <- glmnet(training_cv[,-8], training_cv$DIV, alpha = 1, lambda = lambda) 
+plot(model_lasso)
+coef(model_lasso, s = 0.1)
+#вектор лямбд - коэффициенты, с которым в регрессию входит штраф за большой размер коэффициента
+cvfit <- cv.glmnet(as.matrix(training_cv[,-8]), as.matrix(training_cv$DIV))
+par(mar = c(5, 4, 2, 1))
+?plot
+plot(cvfit)
+#как зависит от лямбда размер каждого коэффициента
+
+plot(model_lasso, xvar = "lambda", label = TRUE, title = 'Зависимость размера коэффициента от параметра штрафа') #если логарифм лямбда будет 2, то коэффициенты резко падают
+#по горизонтали - доля объясненной дисперсии
+plot(model_lasso, xvar = "dev", label = TRUE) #если логарифм лямбда будет 2, то коэффициенты резко падают
+#чем меньше размер коэффициента лямбда, тем меньше объясняем
+#если хочу по максимуму объяснить посредством МНК, то коэффициенты надо брать такие
+
+#разлагаем штраф по составляющим, по горизонтали - величина штрафа (сумма модулей бета с крышкой), по вертикали штраф разложен по коэффициентам
+plot(model_lasso, xvar = "norm", label = TRUE) 
+#можно понять, какой коэффициент определяет сумму штрафа
+
+#посмотрим на сами коэффициенты - оценки коэффициентов в LASSO регрессии
+coef(model_lasso, s = c(0.1688695))
+#ROA попал в 0
+
+glmnet_cv <- glmnet(
+  training_cv[,-8], 
+  training_cv$DIV,
+  alpha = 0.1, 
+  lambda = 0.1688695,
+  verbose = FALSE
+)  
+
+par(mar = c(5, 8, 1, 1))
+summary_glmnet <- as.data.frame(summary(
+  glmnet_cv, 
+  cBars = 10,
+  method = relative.influence, # also can use permutation.test.gbm
+  las = 2
+))
+
+ggplot(summary_glmnet, aes(x = reorder(var, rel.inf), y = rel.inf, fill = rel.inf)) + geom_col(color = "black") + coord_flip() + theme_bw() + ylab("Относительная важность переменной") + xlab("") + labs("Значения") +
+  scale_fill_gradient2(low="#d2cdca", mid="#929fb0",
+                       high="#4a5060", midpoint=18) + theme(legend.position = "bottom")
+
 #сравнение моделей: регрессия / случайный лес / бустинг 
 
 getTrainPerf(gbm_cv_1)[2]
@@ -4001,7 +4153,9 @@ svod1 <- cbind(x,y)
 svod1
 colnames(svod1) <- c("Model", "Result")
 
-ggplot(data = svod1[-3,], aes(x = reorder(Model, Result), y = Result, fill = Model)) + geom_col(color = "black") +theme_bw() + ggtitle("Сравнительный анализ методов для модели жизненного цикла") + xlab("") + ylab("Значение коэффициента детерминации (Rsquared)") + theme(legend.position="none") + scale_fill_manual(values = c("#E5E5E5",  "#2CA5A9", "#013F56")) + geom_label(aes(label=round(Result, 2)),check_overlap = TRUE, fill = "white")
+ggplot(data = svod1[-3,], aes(x = reorder(Model, Result), y = Result, fill = Model)) + geom_col(color = "black") +theme_bw() + ggtitle("Сравнительный анализ методов для модели жизненного цикла") + xlab("") + ylab("Значение коэффициента детерминации (Rsquared)") + theme(legend.position="none", 
+                                                                                                                                                                                                                                                                              axis.text.x = element_text(size = 15), 
+                                                                                                                                                                                                                                                                              axis.title.y = element_text(size = 15)) + scale_fill_manual(values = c("#E5E5E5",  "#2CA5A9", "#013F56")) + geom_label(aes(label=round(Result, 2)),check_overlap = TRUE, fill = "white")
 
 #прокси + Board_size
 data_sum2 <- DataSet2 %>% transmute(Number_Company, DIV, DivToSales = Dividends/Sales, Dividends = log(Dividends), DivToTA = Dividends/BS_Total_Assets, BS_LT_Borrow, CF_FCFF, 
@@ -4548,3 +4702,161 @@ rownames(Data_result) <-ID
 #выгрузка
 stargazer(Data_result, type = "html", 
           summary = FALSE, out = "Data_result.html")
+
+#проверка ФФ для adjusted
+
+shares_data_adjusted <- merge(AAPL$AAPL.Adjusted, AMGN$AMGN.Adjusted, BA$BA.Adjusted, CAT$CAT.Adjusted, CRM$CRM.Adjusted, 
+                     CSCO$CSCO.Adjusted, CVX$CVX.Adjusted, DIS$DIS.Adjusted, HD$HD.Adjusted, HON$HON.Adjusted, 
+                     IBM$IBM.Adjusted, INTC$INTC.Adjusted, JNJ$JNJ.Adjusted, KO$KO.Adjusted, MCD$MCD.Adjusted, MMM$MMM.Adjusted, MRK$MRK.Adjusted, 
+                     MSFT$MSFT.Adjusted, NKE$NKE.Adjusted, PG$PG.Adjusted, UNH$UNH.Adjusted, V$V.Adjusted, 
+                     VZ$VZ.Adjusted, WBA$WBA.Adjusted, WMT$WMT.Adjusted)
+return_adjusted <- na.omit(Return.calculate(shares_data_adjusted))
+
+#%>% pivot_longer(cols = "AAPL UW Equity":"WMT UN Equity", names_to = "ID_Company", values_to = "return") %>% merge(names_data, by = "ID_Company")
+return_adj_10 <- as.data.frame(window(return_adjusted, start = "2010-01-01", end = "2010-12-31"))
+return_adj_11 <- as.data.frame(window(return_adjusted, start = "2011-01-01", end = "2011-12-31")) 
+return_adj_12 <- as.data.frame(window(return_adjusted, start = "2012-01-01", end = "2012-12-31")) 
+return_adj_13 <- as.data.frame(window(return_adjusted, start = "2013-01-01", end = "2013-12-31")) 
+return_adj_14 <- as.data.frame(window(return_adjusted, start = "2014-01-01", end = "2014-12-31")) 
+return_adj_15 <- as.data.frame(window(return_adjusted, start = "2015-01-01", end = "2015-12-31")) 
+return_adj_16 <- as.data.frame(window(return_adjusted, start = "2016-01-01", end = "2016-12-31")) 
+return_adj_17 <- as.data.frame(window(return_adjusted, start = "2017-01-01", end = "2017-12-31"))
+return_adj_18 <- as.data.frame(window(return_adjusted, start = "2018-01-01", end = "2018-12-31"))
+return_adj_19 <- as.data.frame(window(return_adjusted, start = "2019-01-01", end = "2019-12-31"))
+return_adj_20 <- as.data.frame(window(return_adjusted, start = "2020-01-01", end = "2020-12-31")) 
+return_adj_21 <- as.data.frame(window(return_adjusted, start = "2021-01-01", end = "2021-12-31")) 
+
+SmallHigh_SMB10
+colnames(return_adj_10) <- names_data$ID_Company
+colnames(return_adj_11) <- names_data$ID_Company  
+colnames(return_adj_12) <- names_data$ID_Company
+colnames(return_adj_13) <- names_data$ID_Company
+colnames(return_adj_14) <- names_data$ID_Company
+colnames(return_adj_15) <- names_data$ID_Company
+colnames(return_adj_16) <- names_data$ID_Company
+colnames(return_adj_17) <- names_data$ID_Company
+colnames(return_adj_18) <- names_data$ID_Company
+colnames(return_adj_19) <- names_data$ID_Company
+colnames(return_adj_20) <- names_data$ID_Company
+colnames(return_adj_21) <- names_data$ID_Company
+  
+for (i in 10:21) {
+  assign(paste0("SmallHigh_SMB", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$names == "Small High"))
+  assign(paste0("SmallNeutral_SMB", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$names == "Small Neutral"))
+  assign(paste0("SmallLow_SMB", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$names == "Small Low"))
+  assign(paste0("BigHigh_SMB", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$names == "Big High"))
+  assign(paste0("BigNeutral_SMB", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$names == "Big Neutral"))
+  assign(paste0("BigLow_SMB", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$names == "Big Low"))
+  assign(paste0("HighDividend_DVD", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$criteria_Dividend == "High Dividend"))
+  assign(paste0("LowDividend_DVD", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$criteria_Dividend == "Low Dividend"))
+  assign(paste0("NeutralDividend_DVD", i), dplyr::filter(get(paste("svod_FF_tot", i, sep="")), get(paste("svod_FF_tot", i, sep=""))$criteria_Dividend == "Neutral Dividend"))
+}
+
+for (i in 10:21) {
+  assign(paste0("Small_High_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("SmallHigh_SMB", i, sep=""))$ID_Company])
+  assign(paste0("Small_Neutral_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("SmallNeutral_SMB", i, sep=""))$ID_Company])
+  assign(paste0("Small_Low_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("SmallLow_SMB", i, sep=""))$ID_Company])
+  assign(paste0("Big_High_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("BigHigh_SMB", i, sep=""))$ID_Company])
+  assign(paste0("Big_Neutral_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("BigNeutral_SMB", i, sep=""))$ID_Company])
+  assign(paste0("Big_Low_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("BigLow_SMB", i, sep=""))$ID_Company])
+  assign(paste0("HighDividend_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("HighDividend_DVD", i, sep=""))$ID_Company])
+  assign(paste0("LowDividend_Portfolio_adj", i), get(paste("return_adj_", i, sep=""))[, colnames(get(paste("return_adj_", i, sep=""))) %in% get(paste("LowDividend_DVD", i, sep=""))$ID_Company])
+}
+
+for (i in 10:21) {
+  assign(paste0("return_SmallHigh_adj", i), Return.portfolio(R = get(paste("Small_High_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("Small_High_Portfolio_adj", i, sep="")))[2],dim(get(paste("Small_High_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_SmallNeutral_adj", i), Return.portfolio(R = get(paste("Small_Neutral_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("Small_Neutral_Portfolio_adj", i, sep="")))[2],dim(get(paste("Small_Neutral_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_SmallLow_adj", i), Return.portfolio(R = get(paste("Small_Low_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("Small_Low_Portfolio_adj", i, sep="")))[2],dim(get(paste("Small_Low_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_BigHigh_adj", i), Return.portfolio(R = get(paste("Big_High_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("Big_High_Portfolio_adj", i, sep="")))[2],dim(get(paste("Big_High_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_BigNeutral_adj", i), Return.portfolio(R = get(paste("Big_Neutral_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("Big_Neutral_Portfolio_adj", i, sep="")))[2],dim(get(paste("Big_Neutral_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_BigLow_adj", i), Return.portfolio(R = get(paste("Big_Low_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("Big_Low_Portfolio_adj", i, sep="")))[2],dim(get(paste("Big_Low_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_HighDividend_adj", i), Return.portfolio(R = get(paste("HighDividend_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("HighDividend_Portfolio_adj", i, sep="")))[2],dim(get(paste("HighDividend_Portfolio_adj", i, sep="")))[2]))))
+  assign(paste0("return_LowDividend_adj", i), Return.portfolio(R = get(paste("LowDividend_Portfolio_adj", i, sep="")), weights = c(rep(1/dim(get(paste("LowDividend_Portfolio_adj", i, sep="")))[2],dim(get(paste("LowDividend_Portfolio_adj", i, sep="")))[2]))))
+}
+
+#расчет SMB, HML, DVD
+for (i in 10:21) {
+  assign(paste0("SMB_adj", i), 1/3*(get(paste("return_SmallHigh_adj", i, sep = ""))+get(paste("return_SmallNeutral_adj", i, sep = ""))+get(paste("return_SmallLow_adj", i, sep = ""))-
+                                  get(paste("return_BigHigh_adj", i, sep = ""))-get(paste("return_BigNeutral_adj", i, sep = ""))-get(paste("return_BigLow_adj", i, sep = ""))))
+  assign(paste0("HML_adj", i), 1/2*(get(paste("return_SmallHigh_adj", i, sep = ""))+get(paste("return_BigHigh_adj", i, sep = ""))-
+                                  get(paste("return_SmallLow_adj", i, sep = ""))-get(paste("return_BigLow_adj", i, sep = ""))))
+  assign(paste0("DVD_adj", i), get(paste("return_HighDividend_adj", i, sep = ""))-get(paste("return_LowDividend_adj", i, sep = "")))
+  
+}
+
+SMB_new_adj <- rbind(SMB_adj10, SMB_adj11, SMB_adj12, SMB_adj13, SMB_adj14, SMB_adj15, SMB_adj16, SMB_adj17, SMB_adj18, SMB_adj19, SMB_adj20, SMB_adj21)
+colnames(SMB_new_adj) <- "SMB"
+HML_new_adj <- rbind(HML_adj10, HML_adj11, HML_adj12, HML_adj13, HML_adj14, HML_adj15, HML_adj16, HML_adj17, HML_adj18, HML_adj19, HML_adj20, HML_adj21)
+colnames(HML_new_adj) <- "HML"
+DVD_new_adj <- rbind(DVD_adj10, DVD_adj11, DVD_adj12, DVD_adj13, DVD_adj14, DVD_adj15, DVD_adj16, DVD_adj17, DVD_adj18, DVD_adj19, DVD_adj20, DVD_adj21)
+colnames(DVD_new_adj) <- "DVD"
+
+
+dim(testdrive)
+
+for (i in 1:25) {
+  assign(paste0("mod_FF_adj", i), lm(testdrive[,i+3]-I(rf/365) ~ I(return_market[-1,]-rf/365) + SMB_new_adj + HML_new_adj + DVD_new_adj))
+}
+
+#построим оценки для всех и выгрузим
+#первые 25 - это акции
+K <- matrix(0, nrow = 25, ncol = 5)
+t_value <- matrix(0, nrow = 25, ncol = 5)
+Stars <- matrix(0, nrow = 25, ncol = 5)
+q <- qt(0.975, 3015) #степени свободы - n-k: 3019-4=3015
+R2 <- NULL
+
+stargazer(mod_FF_adj1, mod_FF_adj2, mod_FF_adj3, mod_FF_adj4, mod_FF_adj5, type = "html", out = "FF.html")
+
+#запустим цикл
+for(i in 1:25) {
+  model_FF_cycle_adj <- lm(testdrive[,i+3] -I(rf/365) ~  I(return_market[-1,]-rf/365) +
+                         SMB_new_adj + HML_new_adj + DVD_new_adj)
+  S <- summary(model_FF_cycle_adj)
+  K[i,] <- S$coefficients[,1]
+  t_value[i,] <- S$coefficients[,3]
+  Stars[i,] <- abs(S$coefficients[,3]) > q
+  R2[i] <- S$r.squared
+}
+
+#сколько раз дивидендный фактор значим?
+sum(Stars[,5]) #23 / 25 компаний
+#значит, DVD фактор хорошо прогнозирует доходность
+#сколько раз значима альфа?
+sum(Stars[,1]) #3 / 25 компаний
+#выгрузим таблицу со значимыми коэффициентами (буду ставить нули там,
+#где нет значимости)
+Data_result_adj <- data.frame(K*Stars, R2_delta = R2_delta*Stars[,5])
+#первый столбец не выгружаю, там нули
+Data_result <- Data_result_adj[, -1]
+colnames(Data_result) <- c("ERP", "SMB", "HML", "DVD", "delta in Rsquared")
+rownames(Data_result) <-ID
+
+
+#выгрузка
+stargazer(Data_result, type = "html", 
+          summary = FALSE, out = "Data_result.html")
+
+#доп модели с лагами 
+names(DataSet2)
+sposob1 <- DataSet2 %>% group_by(Number_Company) %>% transmute(Number_Year, lag_PayoutRatio = dplyr::lag(PayoutRatio), PayoutRatio, 
+                                                               lag_DIV = dplyr::lag(DIV), DIV)
+model_dop <- lm(data = na.omit(sposob1), DIV ~ lag_DIV)
+summary(model_dop)
+
+adf.test(sposob1$DIV)
+for (i in 1:30){
+  assign(paste0("adf_test", i), dplyr::filter(DataSet2, Number_Company == i))
+}
+
+model_dop1 <- lm(data = na.omit(sposob1), PayoutRatio ~ lag_PayoutRatio)
+summary(model_dop1)
+
+ggplot(data = sposob1, aes(PayoutRatio, x = Number_Year)) + geom_point()
+
+sposob2 <- DataSet2 %>% group_by(Number_Company) %>% transmute(diff_DIV = DIV - dplyr::lag(DIV)) %>% mutate(lag_DIV = dplyr::lag(diff_DIV))
+model00 <- lm(data = sposob2, diff_DIV ~ lag_DIV + as.character(Number_Company))
+summary(model00)
+
+sposob3 <- sposob1 %>% dplyr::filter(Number_Company == 1)
+ggplot(data = sposob3, aes(PayoutRatio, x = Number_Year)) + geom_point()
